@@ -324,7 +324,7 @@ void AccessibilityController::sendEvent(QAccessibleEvent* ev)
     MYLOG() << "object: " << obj->item()->accessibleName() << ", event: " << int(ev->type());
 #endif
 
-    QAccessible::updateAccessibility(ev);
+    //QAccessible::updateAccessibility(ev);
 
     m_eventSent.send(ev);
 }

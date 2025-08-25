@@ -26,11 +26,14 @@
 #include "settings.h"
 #include "themeconverter.h"
 
+#include <QObject>
 #include <QScreen>
 #include <QFontDatabase>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QStandardPaths>
+#include <QFileInfo>
 
 #ifdef Q_OS_WIN
 #include <QOperatingSystemVersion>
@@ -118,6 +121,9 @@ void UiConfiguration::init()
     m_uiArrangement.stateChanged(WINDOW_GEOMETRY_KEY).onNotify(this, [this]() {
         m_windowGeometryChanged.notify();
     });
+
+    QObject::connect(&m_watcher, &QFileSystemWatcher::fileChanged, &m_watcher,
+                     [this](const QString&) { initThemes(); notifyAboutCurrentThemeChanged(); });
 
     correctUserFontIfNeeded();
 
@@ -242,33 +248,75 @@ void UiConfiguration::notifyAboutCurrentThemeChanged()
     m_currentThemeChanged.notify();
 }
 
+static QColor colorFromHex(const QString& hex)
+{
+    QString str = hex;
+    if (str.startsWith('#')) {
+        str.remove(0, 1);
+    }
+
+    bool ok = false;
+
+    if (str.length() == 8) { // RRGGBBAA
+        int r = str.mid(0, 2).toInt(&ok, 16);
+        int g = str.mid(2, 2).toInt(&ok, 16);
+        int b = str.mid(4, 2).toInt(&ok, 16);
+        int a = str.mid(6, 2).toInt(&ok, 16);
+        if (ok) {
+            return QColor(r, g, b, a);
+        }
+    } else if (str.length() == 6) { // RRGGBB
+        int r = str.mid(0, 2).toInt(&ok, 16);
+        int g = str.mid(2, 2).toInt(&ok, 16);
+        int b = str.mid(4, 2).toInt(&ok, 16);
+        if (ok) {
+            return QColor(r, g, b);
+        }
+    }
+
+    return QColor(); // invalid color
+}
+
 ThemeInfo UiConfiguration::makeStandardTheme(const ThemeCode& codeKey) const
 {
     ThemeInfo theme;
     theme.codeKey = codeKey;
 
-    Config config = ConfigReader::read(QString(":/configs/%1.cfg").arg(QString::fromStdString(codeKey)));
+    const QString filename = QString::fromStdString(codeKey) + ".cfg";
+
+    QFileInfo fi(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
+                 + "/configs/" + filename);
+
+    Config config;
+
+    if (fi.exists() && fi.isFile()) {
+        m_watcher.addPath(fi.absoluteFilePath());
+
+        config = ConfigReader::read(fi.absoluteFilePath());
+    } else {
+        config = ConfigReader::read(":/configs/" + filename);
+    }
 
     theme.values = {
-        { BACKGROUND_PRIMARY_COLOR, config.value("background_primary_color").toQString() },
-        { BACKGROUND_SECONDARY_COLOR, config.value("background_secondary_color").toQString() },
-        { BACKGROUND_TERTIARY_COLOR, config.value("background_tertiary_color").toQString() },
-        { BACKGROUND_QUARTERNARY_COLOR, config.value("background_quarternary_color").toQString() },
-        { POPUP_BACKGROUND_COLOR, config.value("popup_background_color").toQString() },
-        { PROJECT_TAB_COLOR, config.value("project_tab_color").toQString() },
-        { TEXT_FIELD_COLOR, config.value("text_field_color").toQString() },
-        { ACCENT_COLOR, config.value("accent_color").toQString() },
-        { STROKE_COLOR, config.value("stroke_color").toQString() },
-        { STROKE_SECONDARY_COLOR, config.value("stroke_secondary_color").toQString() },
-        { BUTTON_COLOR, config.value("button_color").toQString() },
-        { FONT_PRIMARY_COLOR, config.value("font_primary_color").toQString() },
-        { FONT_SECONDARY_COLOR, config.value("font_secondary_color").toQString() },
-        { LINK_COLOR, config.value("link_color").toQString() },
-        { FOCUS_COLOR, config.value("focus_color").toQString() },
-        { WHITE_COLOR, config.value("white_color").toQString() },
-        { BLACK_COLOR, config.value("black_color").toQString() },
-        { PLAY_COLOR, config.value("play_color").toQString() },
-        { RECORD_COLOR, config.value("record_color").toQString() },
+        { BACKGROUND_PRIMARY_COLOR, colorFromHex(config.value("background_primary_color").toQString()) },
+        { BACKGROUND_SECONDARY_COLOR, colorFromHex(config.value("background_secondary_color").toQString()) },
+        { BACKGROUND_TERTIARY_COLOR, colorFromHex(config.value("background_tertiary_color").toQString()) },
+        { BACKGROUND_QUARTERNARY_COLOR, colorFromHex(config.value("background_quarternary_color").toQString()) },
+        { POPUP_BACKGROUND_COLOR, colorFromHex(config.value("popup_background_color").toQString()) },
+        { PROJECT_TAB_COLOR, colorFromHex(config.value("project_tab_color").toQString()) },
+        { TEXT_FIELD_COLOR, colorFromHex(config.value("text_field_color").toQString()) },
+        { ACCENT_COLOR, colorFromHex(config.value("accent_color").toQString()) },
+        { STROKE_COLOR, colorFromHex(config.value("stroke_color").toQString()) },
+        { STROKE_SECONDARY_COLOR, colorFromHex(config.value("stroke_secondary_color").toQString()) },
+        { BUTTON_COLOR, colorFromHex(config.value("button_color").toQString()) },
+        { FONT_PRIMARY_COLOR, colorFromHex(config.value("font_primary_color").toQString()) },
+        { FONT_SECONDARY_COLOR, colorFromHex(config.value("font_secondary_color").toQString()) },
+        { LINK_COLOR, colorFromHex(config.value("link_color").toQString()) },
+        { FOCUS_COLOR, colorFromHex(config.value("focus_color").toQString()) },
+        { WHITE_COLOR, colorFromHex(config.value("white_color").toQString()) },
+        { BLACK_COLOR, colorFromHex(config.value("black_color").toQString()) },
+        { PLAY_COLOR, colorFromHex(config.value("play_color").toQString()) },
+        { RECORD_COLOR, colorFromHex(config.value("record_color").toQString()) },
 
         { BORDER_WIDTH, config.value("border_width").toDouble() },
         { NAVIGATION_CONTROL_BORDER_WIDTH, config.value("navigation_control_border_width").toDouble() },
@@ -283,6 +331,10 @@ ThemeInfo UiConfiguration::makeStandardTheme(const ThemeCode& codeKey) const
 
         { ITEM_OPACITY_DISABLED, config.value("item_opacity_disabled").toDouble() }
     };
+
+    for (const auto& [key, val] : config) {
+        theme.extra.insert(QString::fromStdString(key), colorFromHex(val.toQString()));
+    }
 
     return theme;
 }

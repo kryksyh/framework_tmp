@@ -34,6 +34,8 @@
 #include "uiarrangement.h"
 #include "async/asyncable.h"
 
+#include <QFileSystemWatcher>
+
 namespace muse::ui {
 class UiConfiguration : public IUiConfiguration, public Injectable, public async::Asyncable
 {
@@ -171,5 +173,7 @@ private:
     QStringList m_nonTextFonts;
 
     Config m_config;
+
+    mutable QFileSystemWatcher m_watcher;
 };
 }
