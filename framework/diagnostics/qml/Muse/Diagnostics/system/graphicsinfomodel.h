@@ -33,7 +33,7 @@ class GraphicsInfoModel : public QObject, public muse::Contextable
     Q_OBJECT
     QML_ELEMENT
 
-    muse::ContextInject<ui::IUiEngine> uiengine = { this };
+    muse::GlobalInject<ui::IUiEngine> uiengine;
 
     Q_PROPERTY(QString info READ info NOTIFY infoChanged FINAL)
 

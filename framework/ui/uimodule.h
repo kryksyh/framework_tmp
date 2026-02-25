@@ -64,6 +64,7 @@ public:
 private:
     std::shared_ptr<UiConfiguration> m_configuration;
     api::ThemeApi* m_theme = nullptr;
+    std::shared_ptr<UiEngine> m_uiengine;
 
     #ifdef Q_OS_MAC
     std::shared_ptr<MacOSPlatformTheme> m_platformTheme;
@@ -89,7 +90,6 @@ public:
     void onAllInited(const IApplication::RunMode& mode) override;
 
 private:
-    std::shared_ptr<UiEngine> m_uiengine;
     std::shared_ptr<UiActionsRegister> m_uiactionsRegister;
     std::shared_ptr<NavigationController> m_keyNavigationController;
     std::shared_ptr<WindowsController> m_windowsController;
