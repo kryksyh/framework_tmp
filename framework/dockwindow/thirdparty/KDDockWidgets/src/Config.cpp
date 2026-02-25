@@ -33,16 +33,15 @@
 #include <QQmlContext>
 #endif
 
-#include "ContextData.h"
-
 namespace KDDockWidgets {
+int Config::s_currentContextId = -1;
+std::map<int, Config*> Config::s_configs;
 
 class Config::Private
 {
 public:
-    Private(int ctx)
-        : m_ctx(ctx)
-        , m_frameworkWidgetFactory(new DefaultWidgetFactory(ctx))
+    Private()
+        : m_frameworkWidgetFactory(new DefaultWidgetFactory())
     {
     }
 
@@ -53,7 +52,6 @@ public:
 
     void fixFlags();
 
-    const int m_ctx = 0;
     QQmlEngine *m_qmlEngine = nullptr;
     DockWidgetFactoryFunc m_dockWidgetFactoryFunc = nullptr;
     MainWindowFactoryFunc m_mainWindowFactoryFunc = nullptr;
@@ -70,22 +68,92 @@ public:
 #endif
 };
 
-Config::Config(int ctx)
-    : d(new Private(ctx))
+Config::Config()
+    : d(new Private())
 {
     d->fixFlags();
+}
+
+Config& Config::self()
+{
+    return self(s_currentContextId);
+}
+
+Config& Config::self(int contextId)
+{
+    auto it = s_configs.find(contextId);
+    if (it != s_configs.end()) {
+        return *it->second;
+    }
+
+    Q_ASSERT(contextId == -1 || s_configs.size() <= 1);
+    if (contextId != -1) {
+        it = s_configs.find(-1);
+        if (it != s_configs.end()) {
+            return *it->second;
+        }
+    }
+
+    // Global config
+    auto* config = new Config();
+    s_configs[-1] = config;
 
     // stuff in multisplitter/ can't include the framework widget factory, so set it here
-    auto separatorCreator = [ctx](Layouting::Widget *parent) {
-        return Config::self(ctx).frameworkWidgetFactory()->createSeparator(parent);
+    auto separatorCreator = [](Layouting::Widget *parent) {
+        return Config::self().frameworkWidgetFactory()->createSeparator(parent);
     };
 
     Layouting::Config::self().setSeparatorFactoryFunc(separatorCreator);
+
+    return *config;
 }
 
-Config &Config::self(int ctx)
+Config& Config::createContext(int contextId)
 {
-    return *ContextData::context(ctx)->config;
+    Q_ASSERT(contextId >= 0);
+
+    auto it = s_configs.find(contextId);
+    if (it != s_configs.end()) {
+        delete it->second;
+        s_configs.erase(it);
+    }
+
+    auto* config = new Config();
+
+    // Copy settings from the global confing
+    auto globalIt = s_configs.find(-1);
+    if (globalIt != s_configs.end()) {
+        Config* globalConfig = globalIt->second;
+        config->d->m_flags = globalConfig->d->m_flags;
+        config->d->fixFlags();
+
+        auto multisplitterFlags = Layouting::Config::self().flags();
+        multisplitterFlags.setFlag(Layouting::Config::Flag::LazyResize, config->d->m_flags & Flag_LazyResize);
+        Layouting::Config::self().setFlags(multisplitterFlags);
+
+        config->setInternalFlags(globalConfig->internalFlags());
+        config->setDraggedWindowOpacity(globalConfig->draggedWindowOpacity());
+        config->setMDIPopupThreshold(globalConfig->mdiPopupThreshold());
+#ifdef KDDOCKWIDGETS_QTQUICK
+        config->d->m_qmlEngine = globalConfig->d->m_qmlEngine;
+#endif
+    }
+
+    s_configs[contextId] = config;
+    return *config;
+}
+
+void Config::destroyContext(int contextId)
+{
+    auto it = s_configs.find(contextId);
+    if (it != s_configs.end()) {
+        delete it->second;
+        s_configs.erase(it);
+    }
+
+    if (s_currentContextId == contextId) {
+        s_currentContextId = -1;
+    }
 }
 
 Config::~Config()
@@ -100,7 +168,7 @@ Config::Flags Config::flags() const
 
 void Config::setFlags(Flags f)
 {
-    auto dr = DockRegistry::self(d->m_ctx);
+    auto dr = DockRegistry::self();
     if (!dr->isEmpty(/*excludeBeingDeleted=*/true)) {
         qWarning() << Q_FUNC_INFO << "Only use this function at startup before creating any DockWidget or MainWindow"
                    << "; These are already created: " << dr->mainWindowsNames()
@@ -148,6 +216,22 @@ FrameworkWidgetFactory *Config::frameworkWidgetFactory() const
     return d->m_frameworkWidgetFactory;
 }
 
+int Config::currentContextId()
+{
+    return s_currentContextId;
+}
+
+ConfigContextGuard::ConfigContextGuard(int contextId)
+    : m_previousContextId(Config::s_currentContextId)
+{
+    Config::s_currentContextId = contextId;
+}
+
+ConfigContextGuard::~ConfigContextGuard()
+{
+    Config::s_currentContextId = m_previousContextId;
+}
+
 int Config::separatorThickness() const
 {
     return Layouting::Config::self().separatorThickness();
@@ -155,7 +239,7 @@ int Config::separatorThickness() const
 
 void Config::setSeparatorThickness(int value)
 {
-    if (!DockRegistry::self(d->m_ctx)->isEmpty(/*excludeBeingDeleted=*/true)) {
+    if (!DockRegistry::self()->isEmpty(/*excludeBeingDeleted=*/true)) {
         qWarning() << Q_FUNC_INFO << "Only use this function at startup before creating any DockWidget or MainWindow";
         return;
     }
@@ -185,7 +269,7 @@ TabbingAllowedFunc Config::tabbingAllowedFunc() const
 
 void Config::setAbsoluteWidgetMinSize(QSize size)
 {
-    if (!DockRegistry::self(d->m_ctx)->isEmpty(/*excludeBeingDeleted=*/false)) {
+    if (!DockRegistry::self()->isEmpty(/*excludeBeingDeleted=*/false)) {
         qWarning() << Q_FUNC_INFO << "Only use this function at startup before creating any DockWidget or MainWindow";
         return;
     }
@@ -200,7 +284,7 @@ QSize Config::absoluteWidgetMinSize() const
 
 void Config::setAbsoluteWidgetMaxSize(QSize size)
 {
-    if (!DockRegistry::self(d->m_ctx)->isEmpty(/*excludeBeingDeleted=*/false)) {
+    if (!DockRegistry::self()->isEmpty(/*excludeBeingDeleted=*/false)) {
         qWarning() << Q_FUNC_INFO << "Only use this function at startup before creating any DockWidget or MainWindow";
         return;
     }
@@ -236,13 +320,11 @@ void Config::setQmlEngine(QQmlEngine *qmlEngine)
         return;
     }
 
-    auto dr = DockRegistry::self(d->m_ctx); // make sure our QML types are registered
-    //! FIXME A different context or a different engine is needed.
+    auto dr = DockRegistry::self(); // make sure our QML types are registered
     QQmlContext *context = qmlEngine->rootContext();
-    context->setContextProperty(QStringLiteral("_kddw_context"), d->m_ctx);
     context->setContextProperty(QStringLiteral("_kddwHelpers"), &d->m_qquickHelpers);
     context->setContextProperty(QStringLiteral("_kddwDockRegistry"), dr);
-    context->setContextProperty(QStringLiteral("_kddwDragController"), DragController::instance(d->m_ctx));
+    context->setContextProperty(QStringLiteral("_kddwDragController"), DragController::instance());
     context->setContextProperty(QStringLiteral("_kddw_widgetFactory"), d->m_frameworkWidgetFactory);
 
     d->m_qmlEngine = qmlEngine;
@@ -340,7 +422,7 @@ void Config::setDropIndicatorsInhibited(bool inhibit) const
 {
     if (d->m_dropIndicatorsInhibited != inhibit) {
         d->m_dropIndicatorsInhibited = inhibit;
-        Q_EMIT DockRegistry::self(d->m_ctx)->dropIndicatorsInhibitedChanged(inhibit);
+        Q_EMIT DockRegistry::self()->dropIndicatorsInhibitedChanged(inhibit);
     }
 }
 

@@ -54,8 +54,8 @@ static bool sizeInRange(const QSize& size, const QSize& min, const QSize& max)
 class DockWidgetImpl : public KDDockWidgets::DockWidgetQuick
 {
 public:
-    DockWidgetImpl(int ctx, const QString& uniqueName)
-        : KDDockWidgets::DockWidgetQuick(ctx, uniqueName)
+    DockWidgetImpl(const QString& uniqueName)
+        : KDDockWidgets::DockWidgetQuick(uniqueName)
     {
         setObjectName(uniqueName);
     }
@@ -442,6 +442,17 @@ void DockBase::deinit()
     setInited(false);
 }
 
+QString DockBase::uniqueDockName() const
+{
+    QString name = objectName();
+#ifdef MUSE_MULTICONTEXT_WIP
+    if (iocContext()) {
+        name += "_" + QString::number(iocContext()->id);
+    }
+#endif
+    return name;
+}
+
 bool DockBase::isOpen() const
 {
     IF_ASSERT_FAILED(m_dockWidget) {
@@ -630,16 +641,13 @@ void DockBase::componentComplete()
         return;
     }
 
-    const int ctx = iocContext()->id;
-
-    QString name = objectName();
-    name +=  "_" + QString::number(ctx);
+    QString name = uniqueDockName();
 
     if (content->objectName().isEmpty()) {
         content->setObjectName(name + "_content");
     }
 
-    m_dockWidget = new DockWidgetImpl(ctx, name);
+    m_dockWidget = new DockWidgetImpl(name);
     m_dockWidget->setWidget(content);
     m_dockWidget->setTitle(m_title);
 

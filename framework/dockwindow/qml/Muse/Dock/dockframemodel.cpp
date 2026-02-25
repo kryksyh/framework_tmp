@@ -124,7 +124,18 @@ void DockFrameModel::setFrame(QQuickItem* frame)
         return;
     }
 
+    if (m_frame) {
+        disconnect(m_frame, &QObject::destroyed, this, nullptr);
+    }
+
     m_frame = dynamic_cast<KDDockWidgets::Frame*>(frame);
+
+    if (m_frame) {
+        connect(m_frame, &QObject::destroyed, this, [this]() {
+            m_frame = nullptr;
+        });
+    }
+
     emit frameChanged(frame);
 
     listenChangesInFrame();

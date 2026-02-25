@@ -27,6 +27,7 @@
 
 QT_BEGIN_NAMESPACE
 class QAbstractButton;
+class QQmlContext;
 QT_END_NAMESPACE
 
 namespace Layouting {
@@ -68,8 +69,7 @@ class DOCKS_EXPORT FrameworkWidgetFactory : public QObject
 {
     Q_OBJECT
 public:
-    FrameworkWidgetFactory(int ctx)
-        : m_ctx(ctx) {}
+    FrameworkWidgetFactory() = default;
 
     ///@brief Destructor.Don't delete FrameworkWidgetFactory directly, it's owned
     /// by the framework.
@@ -147,14 +147,16 @@ public:
     virtual QUrl dockwidgetFilename() const = 0;
     virtual QUrl frameFilename() const = 0;
     virtual QUrl floatingWindowFilename() const = 0;
+
+    ///@brief Returns the QQmlContext to use when creating QML components.
+    /// Override to provide a custom context with per-context properties (e.g. IoC context).
+    /// The base implementation returns nullptr, meaning the engine's root context is used.
+    virtual QQmlContext *qmlCreationContext() const;
 #endif
 
     /// @brief Returns the icon to be used with the specified @p type
     /// @param dpr the device pixel ratio of the button
     virtual QIcon iconForButtonType(TitleBarButtonType type, qreal dpr) const = 0;
-
-protected:
-    const int m_ctx = 0;
 
 private:
     Q_DISABLE_COPY(FrameworkWidgetFactory)
@@ -167,9 +169,7 @@ class DOCKS_EXPORT DefaultWidgetFactory : public FrameworkWidgetFactory
 {
     Q_OBJECT
 public:
-    DefaultWidgetFactory(int ctx)
-        : FrameworkWidgetFactory(ctx) {}
-        
+    DefaultWidgetFactory() = default;
     Frame *createFrame(QWidgetOrQuick *parent, FrameOptions) const override;
     TitleBar *createTitleBar(Frame *) const override;
     TitleBar *createTitleBar(FloatingWindow *) const override;
@@ -189,6 +189,7 @@ public:
     QUrl dockwidgetFilename() const override;
     QUrl frameFilename() const override;
     QUrl floatingWindowFilename() const override;
+    QQmlContext *qmlCreationContext() const override;
 #endif
 
     QIcon iconForButtonType(TitleBarButtonType type, qreal dpr) const override;

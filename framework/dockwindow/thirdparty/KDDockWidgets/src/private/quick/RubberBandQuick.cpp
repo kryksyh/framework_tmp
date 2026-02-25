@@ -11,15 +11,18 @@
 
 #include "RubberBandQuick.h"
 #include "Config.h"
+#include "FrameworkWidgetFactory.h"
 
 using namespace KDDockWidgets;
 
-RubberBandQuick::RubberBandQuick(int ctx, QQuickItem *parent)
-    : QWidgetAdapter(ctx, parent)
+RubberBandQuick::RubberBandQuick(QQuickItem *parent)
+    : QWidgetAdapter(parent)
 {
     setVisible(false);
     setZ(1000);
-    QQuickItem *visualItem = createItem(Config::self(ctx).qmlEngine(), QStringLiteral("qrc:/kddockwidgets/private/quick/qml/RubberBand.qml"));
+    QQuickItem *visualItem = createItem(Config::self().qmlEngine(),
+        QStringLiteral("qrc:/kddockwidgets/private/quick/qml/RubberBand.qml"),
+        Config::self().frameworkWidgetFactory()->qmlCreationContext());
     visualItem->setParent(this);
     visualItem->setParentItem(this);
 }
