@@ -78,6 +78,12 @@ QAccessibleInterface* AccessibilityController::accessibleInterface(QObject* wind
 void AccessibilityController::deinit()
 {
     m_pretendFocusTimer.stop();
+
+    const Item& self = findItem(this);
+    if (s_rootObject == self.object) {
+        s_rootObject = nullptr;
+    }
+
     unreg(this);
 }
 

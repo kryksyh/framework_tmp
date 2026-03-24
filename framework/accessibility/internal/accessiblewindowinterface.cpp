@@ -103,7 +103,16 @@ QAccessibleInterface* AccessibleWindowInterface::childAt(int, int) const
 
 QAccessibleInterface* AccessibleWindowInterface::focusChild() const
 {
-    QAccessibleInterface* child = m_children->controller().lock()->focusedChild(m_children->item());
+    if (!m_children) {
+        return nullptr;
+    }
+
+    auto controller = m_children->controller().lock();
+    if (!controller) {
+        return nullptr;
+    }
+
+    QAccessibleInterface* child = controller->focusedChild(m_children->item());
     MYLOG() << "item: " << m_children->item()->accessibleName() << ", focused child: " << (child ? child->text(QAccessible::Name) : "null");
     return child;
 }
